@@ -1,0 +1,265 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  Participant Stack for DevSecOps CTF Workshop
+Parameters:
+  ParticipantName:
+    Description: A witty name for you as an individual participant (for scoreboard).
+    Type: String
+  SquadName:
+    Description: A witty name for your blue squad / team (last writer wins).
+    Type: String
+  SecretHash:
+    Description: Your secret hash, given to you on paper, to register.
+    Type: String
+  SquadHash:
+    Description: Your Team's hash, given to you on paper, to register with a squad / team.
+    Type: String
+  RegisterUrl:
+    Default: https://api.security.catsndogs.lol/
+    Description: Registration endpoint, to get you onboard with the CATSNDOGS.LOL Security team.
+    Type: String
+
+Outputs:
+  DevSecOpsStarterLink:
+    Value:
+      Fn::Sub: https://${AWS::Region}.console.aws.amazon.com/lambda/home?region=${AWS::Region}#/functions/${DevSecOpsStarter}?tab=code
+  EndpointURL:
+    Value:
+      Fn::Sub: https://${RestAPI}.execute-api.${AWS::Region}.amazonaws.com/api/
+
+Resources:
+  APIHandler:
+    Properties:
+      CodeUri: s3://devsecops-assets/participant.zip
+      Environment:
+        Variables:
+          LAMBDA: !Ref DevSecOpsStarter
+          TESTLAMBDA: !Ref TestDevSecOpsStarter
+      Events:
+        indexpost6a99:
+          Properties:
+            Method: post
+            Path: /
+            RestApiId:
+              Ref: RestAPI
+          Type: Api
+        testpost098f:
+          Properties:
+            Method: post
+            Path: /test
+            RestApiId:
+              Ref: RestAPI
+          Type: Api
+      Handler: app.app
+      MemorySize: 128
+      Policies: AWSLambdaFullAccess
+      Runtime: python3.6
+      Tags:
+        aws-chalice: version=1.0.2:stage=dev:app=participant
+      Timeout: 60
+    Type: AWS::Serverless::Function
+  RestAPI:
+    Properties:
+      DefinitionBody:
+        definitions:
+          Empty:
+            title: Empty Schema
+            type: object
+        info:
+          title: participant
+          version: '1.0'
+        paths:
+          /:
+            options:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+                  schema:
+                    $ref: '#/definitions/Empty'
+              x-amazon-apigateway-integration:
+                passthroughBehavior: when_no_match
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                responses:
+                  default:
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Authorization,Content-Type,X-Amz-Date,X-Amz-Security-Token,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''POST,OPTIONS'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    statusCode: '200'
+                type: mock
+            post:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: '#/definitions/Empty'
+              x-amazon-apigateway-integration:
+                contentHandling: CONVERT_TO_TEXT
+                httpMethod: POST
+                passthroughBehavior: when_no_match
+                responses:
+                  default:
+                    statusCode: '200'
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APIHandler.Arn}/invocations
+          /test:
+            options:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+                  schema:
+                    $ref: '#/definitions/Empty'
+              x-amazon-apigateway-integration:
+                passthroughBehavior: when_no_match
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                responses:
+                  default:
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Authorization,Content-Type,X-Amz-Date,X-Amz-Security-Token,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''POST,OPTIONS'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    statusCode: '200'
+                type: mock
+            post:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: '#/definitions/Empty'
+              x-amazon-apigateway-integration:
+                contentHandling: CONVERT_TO_TEXT
+                httpMethod: POST
+                passthroughBehavior: when_no_match
+                responses:
+                  default:
+                    statusCode: '200'
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APIHandler.Arn}/invocations
+        schemes:
+        - https
+        swagger: '2.0'
+        x-amazon-apigateway-binary-media-types:
+        - application/octet-stream
+        - application/x-tar
+        - application/zip
+        - audio/basic
+        - audio/ogg
+        - audio/mp4
+        - audio/mpeg
+        - audio/wav
+        - audio/webm
+        - image/png
+        - image/jpg
+        - image/gif
+        - video/ogg
+        - video/mpeg
+        - video/webm
+      StageName: api
+    Type: AWS::Serverless::Api
+
+  RegistratorResource:
+    Type: "Custom::Registrator"
+    Properties:
+      ServiceToken: !GetAtt Registrator.Arn
+      ParticipantName: !Ref ParticipantName
+      SecretHash: !Ref SecretHash
+      SquadName: !Ref SquadName
+      SquadHash: !Ref SquadHash
+      RegisterUrl: !Ref RegisterUrl
+      Endpoint:
+        Fn::Sub: https://${RestAPI}.execute-api.${AWS::Region}.amazonaws.com/api/
+
+  Registrator:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: devsecops-assets
+        S3Key: custom_resource.zip
+      Handler: custom_resource.handler
+      Runtime: python3.6
+      Timeout: 30
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  DevSecOpsStarter:
+      Type: AWS::Lambda::Function
+      Properties:
+        Code:
+          S3Bucket: devsecops-assets
+          S3Key: devsecops_starter.zip
+        Handler: devsecops.handler
+        Runtime: python3.6
+        Timeout: 30
+        Role: !GetAtt LambdaExecutionRole.Arn
+  
+  TestDevSecOpsStarter:
+      Type: AWS::Lambda::Function
+      Properties:
+        Code:
+          S3Bucket: devsecops-assets
+          S3Key: devsecops_starter.zip
+        Handler: devsecops.handler
+        Runtime: python3.6
+        Timeout: 30
+        Role: !GetAtt LambdaExecutionRole.Arn
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+
+Transform: AWS::Serverless-2016-10-31
