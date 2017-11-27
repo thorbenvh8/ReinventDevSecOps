@@ -88,7 +88,9 @@ def handler(event, context):
 
     #Now we loop over resources in the template, looking for policy breaches
     for resource in cfn['Resources']:
-        #Test for Security Groups for Unicorn Security policy0
+
+        ### POLICY 0: Test for Security Groups
+
         if cfn['Resources'][resource]["Type"] == """AWS::EC2::SecurityGroup""":
             if "SecurityGroupIngress" in cfn['Resources'][resource]["Properties"]:
                 for rule in cfn['Resources'][resource]["Properties"]['SecurityGroupIngress']:
@@ -121,7 +123,33 @@ def handler(event, context):
                             result['policy0'] += 1  # Add one to our policy fail counter
                             result["errors"].append("policy0: Port {} is only allowed for WebServerSecurityGroup".format(rule["ToPort"]))
 
-        #Test for S3 Buckets
+        ### POLICY 1: Test for IAM policies
+
+        IAM_ENTITIES = ["AWS::IAM::User", "AWS::IAM::Group", "AWS::IAM::Role"]
+
+        if cfn['Resources'][resource]["Type"] in IAM_ENTITIES:
+            if 'Policies' in cfn['Resources'][resource]["Properties"].keys():
+                for policy in cfn['Resources'][resource]["Properties"]["Policies"]:
+                    for permission in policy["PolicyDocument"]["Statement"]:
+                        if permission["Action"] == "*" or permission["Action"].startswith("iam") or permission["Action"].startswith("organizations"):
+                            result['pass'] = False
+                            result['policy1'] += 1  # Add one to our policy fail counter
+                            result["errors"].append("policy1: IAM inline policies cannot have *, iam: or organizations: in Action")
+
+            # Test for IAM Role
+            if cfn['Resources'][resource]["Type"] == """AWS::IAM::Role""":
+                # Test AccessControl for not allowing public accessibility
+                if "ManagedPolicyArns" in cfn['Resources'][resource]["Properties"]:
+                    managedPolicyArns = cfn['Resources'][resource]["Properties"]['ManagedPolicyArns']
+                    send_slack("BUILD: Found IAM Role ManagedPolicyArns rule: {}".format(managedPolicyArns))
+                    cleanedManagedPolicyArns = managedPolicyArns.replace("")
+                    if cleanedManagedPolicyArns != "AWSSupportAccess" or cleanedManagedPolicyArns != "SupportUser" or "CloudWatch" in cleanedManagedPolicyArns:
+                        result['pass'] = False
+                        result['policy1'] += 1  # Add one to our policy fail counter
+                        result["errors"].append("policy1: Only support or cloudwatch related \"IAM managed policies\" can be specified to create IAM users.")
+
+        #### POLICY 3: Test for S3 Buckets
+
         if cfn['Resources'][resource]["Type"] == """AWS::S3::Bucket""":
             #Test AccessControl for not allowing public accessibility
             if "AccessControl" in cfn['Resources'][resource]["Properties"]:
@@ -137,7 +165,6 @@ def handler(event, context):
 
                     send_slack("BUILD: Found blockdevice mapping rule: {}".format(blockdevicemapping))
 
-
                     # only non-root devices should be checked
                     if blockdevicemapping['DeviceName'] != '/dev/sda1':
                         if "Ebs" in blockdevicemapping:
@@ -145,7 +172,6 @@ def handler(event, context):
                                 result['pass'] = False
                                 result['policy3'] += 1 #Add one to our policy fail counter
                                 result["errors"].append("policy3: EBS device mapped on {} is not encrypted".format(blockdevicemapping['DeviceName']))
-
         # Test for IAM policies
         if cfn['Resources'][resource]["Type"] == """AWS::IAM::Policy""":
             policy = cfn['Resources'][resource]["Properties"]["PolicyDocument"]
@@ -159,17 +185,6 @@ def handler(event, context):
                 result['policy3'] += 1 #Add one to our policy fail counter
                 result["errors"].append("policy3: RDS instance {} does not have encrypted storage enabled".format(cfn['Resources'][resource]["Properties"]["DBName"]))
 
-        #Test for IAM Role
-        if cfn['Resources'][resource]["Type"] == """AWS::IAM::Role""":
-            #Test AccessControl for not allowing public accessibility
-            if "ManagedPolicyArns" in cfn['Resources'][resource]["Properties"]:
-                managedPolicyArns = cfn['Resources'][resource]["Properties"]['ManagedPolicyArns']
-                send_slack("BUILD: Found IAM Role ManagedPolicyArns rule: {}".format(managedPolicyArns))
-                cleanedManagedPolicyArns = managedPolicyArns.replace("")
-                if cleanedManagedPolicyArns != "AWSSupportAccess" or cleanedManagedPolicyArns != "SupportUser" or "CloudWatch" in cleanedManagedPolicyArns:
-                    result['pass'] = False
-                    result['policy0'] += 1 #Add one to our policy fail counter
-                    result["errors"].append("policy1: Only support or cloudwatch related \"IAM managed policies\" can be specified to create IAM users.")
 
     # Now, how did we do? We need to return accurate statics of any policy failures.
     if not result["pass"]:
