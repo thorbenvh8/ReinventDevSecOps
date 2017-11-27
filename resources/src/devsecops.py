@@ -32,8 +32,8 @@ from urllib.parse import urlencode
 import urllib.request as urlrequest
 
 #Configure these to Slack for ChatOps
-SLACK_CHANNEL = '' #Slack Channel to target
-HOOK_URL = "" #Like https://hooks.slack.com/services/T3KsdfVTL/B3dfNJ4V8/HmsgdXdzjW16pAD3CdASQChI
+SLACK_CHANNEL = '#general' #Slack Channel to target
+HOOK_URL = "https://hooks.slack.com/services/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"
 
 # Helper Function to enable us to put visibility into chat ops. Also outputs to Cloudwatch Logs.
 # The Slack channel to send a message to stored in the slackChannel environment variable
