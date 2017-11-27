@@ -67,7 +67,6 @@ ruamel.yaml.SafeLoader.add_multi_constructor(u'!', general_constructor)
 SECURE_PORTS = ["443","22"]
 MYSQL_PORT = '3306'
 
-
 #Our DevSecOps Logic
 def handler(event, context):
     yaml = base64.b64decode(event['b64template'])
@@ -85,6 +84,7 @@ def handler(event, context):
     }
 
     send_slack("BUILD: Starting DevSecOps static code analysis of CFN template: {}".format(cfn['Description']))
+    send_slack("BUILD: Starting DevSecOps static code analysis of CFN template: {}".format(json.dumps(cfn,indent=4, separators=(',', ': '))))
 
     #Now we loop over resources in the template, looking for policy breaches
     for resource in cfn['Resources']:
@@ -108,8 +108,15 @@ def handler(event, context):
                             result['policy0'] += 1 #Add one to our policy fail counter
                             result["errors"].append("policy0: Port range {}-{} in not allowed for /0".format(rule["FromPort"],rule["ToPort"]))
 
-                        # Test that only WebServerSecurityGroup can access RDS instances on port 3306
-                        if rule['ToPort'] == MYSQL_PORT and rule["SourceSecurityGroupName"] != 'WebServerSecurityGroup':
+                        # Test that WebServerSecurityGroup can only be accessed from a Security Group id
+                        if rule['ToPort'] == MYSQL_PORT:
+                            result['pass'] = False
+                            result['policy0'] += 1  # Add one to our policy fail counter
+                            result["errors"].append("policy0: Port {} is only allowed for WebServerSecurityGroup".format(rule["ToPort"]))
+
+                    else:
+                        # Test that WebServerSecurityGroup can only be accessed from the WebServerSecurityGroup
+                        if rule['ToPort'] == MYSQL_PORT and rule["SourceSecurityGroupName"] is not 'WebServerSecurityGroup':
                             result['pass'] = False
                             result['policy0'] += 1  # Add one to our policy fail counter
                             result["errors"].append("policy0: Port {} is only allowed for WebServerSecurityGroup".format(rule["ToPort"]))
@@ -124,6 +131,33 @@ def handler(event, context):
                     result['pass'] = False
                     result['policy0'] += 1 #Add one to our policy fail counter
                     result["errors"].append("policy0: Any Amazon S3 bucket cannot be publically accessible")
+        if cfn['Resources'][resource]["Type"] == """AWS::EC2::Instance""":
+            if "BlockDeviceMappings" in cfn['Resources'][resource]["Properties"]:
+                for blockdevicemapping in cfn['Resources'][resource]["Properties"]['BlockDeviceMappings']:
+
+                    send_slack("BUILD: Found blockdevice mapping rule: {}".format(blockdevicemapping))
+
+
+                    # only non-root devices should be checked
+                    if blockdevicemapping['DeviceName'] != '/dev/sda1':
+                        if "Ebs" in blockdevicemapping:
+                            if 'Encrypted' not in blockdevicemapping["Ebs"] or not blockdevicemapping["Ebs"]['Encrypted']:
+                                result['pass'] = False
+                                result['policy3'] += 1 #Add one to our policy fail counter
+                                result["errors"].append("policy3: EBS device mapped on {} is not encrypted".format(blockdevicemapping['DeviceName']))
+
+        # Test for IAM policies
+        if cfn['Resources'][resource]["Type"] == """AWS::IAM::Policy""":
+            policy = cfn['Resources'][resource]["Properties"]["PolicyDocument"]
+            print (policy["Statement"])
+
+        if cfn['Resources'][resource]["Type"] == """AWS::RDS::DBInstance""":
+            send_slack("BUILD: Found RDS instance for mapping rule: {}".format(cfn['Resources'][resource]["Properties"]["DBName"]))
+
+            if 'StorageEncrypted' not in cfn['Resources'][resource]["Properties"] or not cfn['Resources'][resource]["Properties"]['StorageEncrypted']:
+                result['pass'] = False
+                result['policy3'] += 1 #Add one to our policy fail counter
+                result["errors"].append("policy3: RDS instance {} does not have encrypted storage enabled".format(cfn['Resources'][resource]["Properties"]["DBName"]))
 
         #Test for IAM Role
         if cfn['Resources'][resource]["Type"] == """AWS::IAM::Role""":
