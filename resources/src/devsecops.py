@@ -67,7 +67,6 @@ ruamel.yaml.SafeLoader.add_multi_constructor(u'!', general_constructor)
 SECURE_PORTS = ["443","22"]
 MYSQL_PORT = '3306'
 
-
 #Our DevSecOps Logic
 def handler(event, context):
     yaml = base64.b64decode(event['b64template'])
@@ -109,8 +108,15 @@ def handler(event, context):
                             result['policy0'] += 1 #Add one to our policy fail counter
                             result["errors"].append("policy0: Port range {}-{} in not allowed for /0".format(rule["FromPort"],rule["ToPort"]))
 
-                        # Test that only WebServerSecurityGroup can access RDS instances on port 3306
-                        if rule['ToPort'] == MYSQL_PORT and rule["SourceSecurityGroupName"] != 'WebServerSecurityGroup':
+                        # Test that WebServerSecurityGroup can only be accessed from a Security Group id
+                        if rule['ToPort'] == MYSQL_PORT:
+                            result['pass'] = False
+                            result['policy0'] += 1  # Add one to our policy fail counter
+                            result["errors"].append("policy0: Port {} is only allowed for WebServerSecurityGroup".format(rule["ToPort"]))
+
+                    else:
+                        # Test that WebServerSecurityGroup can only be accessed from the WebServerSecurityGroup
+                        if rule['ToPort'] == MYSQL_PORT and rule["SourceSecurityGroupName"] is not 'WebServerSecurityGroup':
                             result['pass'] = False
                             result['policy0'] += 1  # Add one to our policy fail counter
                             result["errors"].append("policy0: Port {} is only allowed for WebServerSecurityGroup".format(rule["ToPort"]))
@@ -139,6 +145,11 @@ def handler(event, context):
                                 result['pass'] = False
                                 result['policy3'] += 1 #Add one to our policy fail counter
                                 result["errors"].append("policy3: EBS device mapped on {} is not encrypted".format(blockdevicemapping['DeviceName']))
+
+        # Test for IAM policies
+        if cfn['Resources'][resource]["Type"] == """AWS::IAM::Policy""":
+            policy = cfn['Resources'][resource]["Properties"]["PolicyDocument"]
+            print (policy["Statement"])
 
 
     # Now, how did we do? We need to return accurate statics of any policy failures.
