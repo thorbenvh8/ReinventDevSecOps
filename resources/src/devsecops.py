@@ -148,6 +148,12 @@ def handler(event, context):
                         result['policy1'] += 1  # Add one to our policy fail counter
                         result["errors"].append("policy1: Only support or cloudwatch related \"IAM managed policies\" can be specified to create IAM users.")
 
+        if cfn['Resources'][resource]["Type"] == """AWS::EC2::Instance""":
+            if "IamInstanceProfile" not in cfn['Resources'][resource]["Properties"]:
+                result['pass'] = False
+                result['policy0'] += 1 #Add one to our policy fail counter
+                result["errors"].append("policy1: Any EC2 must be created with IAM role to access other services") 
+
         #### POLICY 3: Test for S3 Buckets
 
         if cfn['Resources'][resource]["Type"] == """AWS::S3::Bucket""":
