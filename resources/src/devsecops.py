@@ -151,6 +151,13 @@ def handler(event, context):
             policy = cfn['Resources'][resource]["Properties"]["PolicyDocument"]
             print (policy["Statement"])
 
+        if cfn['Resources'][resource]["Type"] == """AWS::RDS::DBInstance""":
+            send_slack("BUILD: Found RDS instance for mapping rule: {}".format(cfn['Resources'][resource]["Properties"]["DBName"]))
+
+            if 'StorageEncrypted' not in cfn['Resources'][resource]["Properties"] or not cfn['Resources'][resource]["Properties"]['StorageEncrypted']:
+                result['pass'] = False
+                result['policy3'] += 1 #Add one to our policy fail counter
+                result["errors"].append("policy3: RDS instance {} does not have encrypted storage enabled".format(cfn['Resources'][resource]["Properties"]["DBName"]))
 
     # Now, how did we do? We need to return accurate statics of any policy failures.
     if not result["pass"]:
