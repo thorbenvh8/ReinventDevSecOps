@@ -32,8 +32,8 @@ from urllib.parse import urlencode
 import urllib.request as urlrequest
 
 #Configure these to Slack for ChatOps
-SLACK_CHANNEL = '' #Slack Channel to target
-HOOK_URL = "" #Like https://hooks.slack.com/services/T3KsdfVTL/B3dfNJ4V8/HmsgdXdzjW16pAD3CdASQChI
+SLACK_CHANNEL = '#general' #Slack Channel to target
+HOOK_URL = "https://hooks.slack.com/services/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"
 
 # Helper Function to enable us to put visibility into chat ops. Also outputs to Cloudwatch Logs.
 # The Slack channel to send a message to stored in the slackChannel environment variable
@@ -65,6 +65,8 @@ ruamel.yaml.SafeLoader.add_multi_constructor(u'!', general_constructor)
 
 # Define basic security globals
 SECURE_PORTS = ["443","22"]
+MYSQL_PORT = '3306'
+
 
 #Our DevSecOps Logic
 def handler(event, context):
@@ -106,7 +108,15 @@ def handler(event, context):
                             result['policy0'] += 1 #Add one to our policy fail counter
                             result["errors"].append("policy0: Port range {}-{} in not allowed for /0".format(rule["FromPort"],rule["ToPort"]))
 
+                        # Test that only WebServerSecurityGroup can access RDS instances on port 3306
+                        if rule['ToPort'] == MYSQL_PORT and rule["SourceSecurityGroupName"] != 'WebServerSecurityGroup':
+                            result['pass'] = False
+                            result['policy0'] += 1  # Add one to our policy fail counter
+                            result["errors"].append("policy0: Port {} is only allowed for WebServerSecurityGroup".format(rule["ToPort"]))
+
+        #Test for S3 Buckets
         if cfn['Resources'][resource]["Type"] == """AWS::S3::Bucket""":
+            #Test AccessControl for not allowing public accessibility
             if "AccessControl" in cfn['Resources'][resource]["Properties"]:
                 accessControl = cfn['Resources'][resource]["Properties"]['AccessControl']
                 send_slack("BUILD: Found S3 AccessControl rule: {}".format(accessControl))
@@ -114,7 +124,6 @@ def handler(event, context):
                     result['pass'] = False
                     result['policy0'] += 1 #Add one to our policy fail counter
                     result["errors"].append("policy0: Any Amazon S3 bucket cannot be publically accessible")
-
 
     # Now, how did we do? We need to return accurate statics of any policy failures.
     if not result["pass"]:
