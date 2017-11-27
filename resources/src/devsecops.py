@@ -125,6 +125,18 @@ def handler(event, context):
                     result['policy0'] += 1 #Add one to our policy fail counter
                     result["errors"].append("policy0: Any Amazon S3 bucket cannot be publically accessible")
 
+        #Test for IAM Role
+        if cfn['Resources'][resource]["Type"] == """AWS::IAM::Role""":
+            #Test AccessControl for not allowing public accessibility
+            if "ManagedPolicyArns" in cfn['Resources'][resource]["Properties"]:
+                managedPolicyArns = cfn['Resources'][resource]["Properties"]['ManagedPolicyArns']
+                send_slack("BUILD: Found IAM Role ManagedPolicyArns rule: {}".format(managedPolicyArns))
+                cleanedManagedPolicyArns = managedPolicyArns.replace("")
+                if cleanedManagedPolicyArns != "AWSSupportAccess" or cleanedManagedPolicyArns != "SupportUser" or "CloudWatch" in cleanedManagedPolicyArns:
+                    result['pass'] = False
+                    result['policy0'] += 1 #Add one to our policy fail counter
+                    result["errors"].append("policy1: Only support or cloudwatch related \"IAM managed policies\" can be specified to create IAM users.")
+
     # Now, how did we do? We need to return accurate statics of any policy failures.
     if not result["pass"]:
         for err in result["errors"]:
