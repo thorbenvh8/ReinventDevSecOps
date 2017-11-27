@@ -185,6 +185,13 @@ def handler(event, context):
                 result['policy3'] += 1 #Add one to our policy fail counter
                 result["errors"].append("policy3: RDS instance {} does not have encrypted storage enabled".format(cfn['Resources'][resource]["Properties"]["DBName"]))
 
+        # cloudfront
+        if cfn['Resources'][resource]["Type"] == """AWS::CloudFront::Distribution""":
+            if 'ViewerProtocolPolicy' in cfn['Resources'][resource]["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]:
+                 if cfn['Resources'][resource]["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]["ViewerProtocolPolicy"] != "https-only":
+                     result['pass'] = False
+                     result['policy3'] += 1 #Add one to our policy fail counter
+                     result["errors"].append("Policy3 Subrule2: ViewerProtocolPolicy {} is not allowed. https-only.".format(cfn['Resources'][resource]["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]["ViewerProtocolPolicy"]))
 
     # Now, how did we do? We need to return accurate statics of any policy failures.
     if not result["pass"]:
