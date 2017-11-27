@@ -56,7 +56,7 @@ def send_slack(message, username="SecurityBot", emoji=":exclamation:"):
     except requests.exceptions.RequestException:
         print("Slack connection failed. Valid webhook?")
         return None
-        
+
 
 # Define a YAML reader for parsing Cloudformation to handle !Functions like Ref
 def general_constructor(loader, tag_suffix, node):
@@ -70,18 +70,18 @@ SECURE_PORTS = ["443","22"]
 def handler(event, context):
     yaml = base64.b64decode(event['b64template'])
     cfn = ruamel.yaml.safe_load(yaml)
-    
+
     # We return result for scoring. it needs a policyN entry for every rule, with count of violations.
     # Errors is for debug purposes only when testing
     result = {
         "pass":True,
         "policy0":0,
-        "policy1":0, 
-        "policy2":0, 
+        "policy1":0,
+        "policy2":0,
         "policy3":0,
         "errors":[]
     }
-    
+
     send_slack("BUILD: Starting DevSecOps static code analysis of CFN template: {}".format(cfn['Description']))
 
     #Now we loop over resources in the template, looking for policy breaches
@@ -106,6 +106,14 @@ def handler(event, context):
                             result['policy0'] += 1 #Add one to our policy fail counter
                             result["errors"].append("policy0: Port range {}-{} in not allowed for /0".format(rule["FromPort"],rule["ToPort"]))
 
+        if cfn['Resources'][resource]["Type"] == """AWS::S3::Bucket""":
+            if "AccessControl" in cfn['Resources'][resource]["Properties"]:
+                accessControl = cfn['Resources'][resource]["Properties"]['AccessControl']
+                send_slack("BUILD: Found S3 AccessControl rule: {}".format(accessControl))
+                if accessControl == "PublicRead" or accessControl == "PublicReadWrite":
+                    result['pass'] = False
+                    result['policy0'] += 1 #Add one to our policy fail counter
+                    result["errors"].append("policy0: Any Amazon S3 bucket cannot be publically accessible")
 
 
     # Now, how did we do? We need to return accurate statics of any policy failures.

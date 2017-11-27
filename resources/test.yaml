@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Private App Server
+Resources:
+  #My Private Internal Application
+  MyInstance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: "ami-f173cc91"
+      InstanceType: t2.micro
+      SecurityGroupIds:
+        - Ref: "MySecurityGroup"
+  #I think this lets me access it
+  MyEIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      InstanceId: !Ref MyInstance
+  #Was hard getting this to work, so changed everything to 0.0.0.0/0
+  MySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http, telnet and SSH
+      VpcId: "vpc-eed9a589"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '23'
+        ToPort: '23'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '21'
+        ToPort: '21'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 172.31.0.0/16
+  #Need a role for instance to access DynamoDB
+  RootRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+      Policies:
+        -
+          PolicyName: "root"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: "*"
+                Resource: "*"
+
+  RootInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        -
+          Ref: "RootRole"
