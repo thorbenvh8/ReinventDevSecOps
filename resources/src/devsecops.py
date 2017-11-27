@@ -65,6 +65,8 @@ ruamel.yaml.SafeLoader.add_multi_constructor(u'!', general_constructor)
 
 # Define basic security globals
 SECURE_PORTS = ["443","22"]
+MYSQL_PORT = '3306'
+
 
 #Our DevSecOps Logic
 def handler(event, context):
@@ -106,7 +108,11 @@ def handler(event, context):
                             result['policy0'] += 1 #Add one to our policy fail counter
                             result["errors"].append("policy0: Port range {}-{} in not allowed for /0".format(rule["FromPort"],rule["ToPort"]))
 
-
+                        # Test that only WebServerSecurityGroup can access RDS instances on port 3306
+                        if rule['ToPort'] == MYSQL_PORT and rule["SourceSecurityGroupName"] != 'WebServerSecurityGroup':
+                            result['pass'] = False
+                            result['policy0'] += 1  # Add one to our policy fail counter
+                            result["errors"].append("policy0: Port {} is only allowed for WebServerSecurityGroup".format(rule["ToPort"]))
 
     # Now, how did we do? We need to return accurate statics of any policy failures.
     if not result["pass"]:
