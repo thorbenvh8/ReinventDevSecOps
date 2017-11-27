@@ -85,6 +85,7 @@ def handler(event, context):
     }
 
     send_slack("BUILD: Starting DevSecOps static code analysis of CFN template: {}".format(cfn['Description']))
+    send_slack("BUILD: Starting DevSecOps static code analysis of CFN template: {}".format(json.dumps(cfn,indent=4, separators=(',', ': '))))
 
     #Now we loop over resources in the template, looking for policy breaches
     for resource in cfn['Resources']:
@@ -124,6 +125,21 @@ def handler(event, context):
                     result['pass'] = False
                     result['policy0'] += 1 #Add one to our policy fail counter
                     result["errors"].append("policy0: Any Amazon S3 bucket cannot be publically accessible")
+        if cfn['Resources'][resource]["Type"] == """AWS::EC2::Instance""":
+            if "BlockDeviceMappings" in cfn['Resources'][resource]["Properties"]:
+                for blockdevicemapping in cfn['Resources'][resource]["Properties"]['BlockDeviceMappings']:
+
+                    send_slack("BUILD: Found blockdevice mapping rule: {}".format(blockdevicemapping))
+
+
+                    # only non-root devices should be checked
+                    if blockdevicemapping['DeviceName'] != '/dev/sda1':
+                        if "Ebs" in blockdevicemapping:
+                            if 'Encrypted' not in blockdevicemapping["Ebs"] or not blockdevicemapping["Ebs"]['Encrypted']:
+                                result['pass'] = False
+                                result['policy3'] += 1 #Add one to our policy fail counter
+                                result["errors"].append("policy3: EBS device mapped on {} is not encrypted".format(blockdevicemapping['DeviceName']))
+
 
     # Now, how did we do? We need to return accurate statics of any policy failures.
     if not result["pass"]:
